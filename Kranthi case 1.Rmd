@@ -1,0 +1,311 @@
+---
+title: "Kranthi case 1"
+output: pdf_document
+date: '2022-07-05'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+## Executive Summary
+
+* I started to understand the dataset by importing data and this data set involves mmany visualizations and includes modeling. * 
+# Introduction
+
+## TAYKO SOFTWARE 
+
+#The data file Tayko.csv consist of 25 columns, with id as sequence number, and we consider 24 variables to predict the output.
+
+## Business Problem:
+### Predicting Software Reselling Profits
+### Background: Tayko is a software catalog firm that sells games and educational software. It started out as a software manufacturer and later added third-party titles to its offerings. It has recently put together a revised collection of items in a new catalog, which it is preparing to roll out in a mailing.
+### In addition to its own software titles, Tayko’s customer list is a key asset. In an attempt to expand its customer base, it has recently joined a consortium of catalog firms that specialize in computer and software products. The consortium affords members the opportunity to mail catalogs to names drawn from a pooled list of customers. Members supply their own customer lists to the pool, and can “withdraw” an equivalent number of names each quarter. Members are allowed to do predictive modeling on the records in the pool so they can do a better job of selecting names from the pool.
+
+### Further, Tayko has supplied its customer list of 200,000 names to the pool, which totals over 5,000,000 names, so it is now entitled to draw 200,000 names for a mailing. Tayko would like to select the names that have the best chance of performing well, so it conducts a test—it draws 20,000 names from the pool and does a test mailing of the new catalog.
+
+### OBJECTIVE: From the dataset Tayko.csv, Purchase output variable is considered for the analysis and prediction.  The objective of the model is to classify records into 'PURCHASE' or "NO PURCHASE'. 
+
+# STAGE 1:
+## Improting the required packages
+```{r}
+#LOADING AND EXPLORING DATA
+#Loading required libraries.
+library(knitr)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(corrplot)
+library(gridExtra)
+library(scales)
+library(ggrepel)
+
+```
+
+
+```{r}
+#Below, I am reading the Tayko.csv’s as dataframes into R.
+library(readr)
+tayko <- read_csv("Tayko.csv")
+```
+
+**Data size and structure**
+```{r}
+dim(tayko)
+```
+
+```{r}
+str(tayko[,c(1:10, 25)]) #display first 10 variables and the response variable
+```
+
+**Data cleaning**
+
+```{r}
+# get column names
+colnames(tayko)
+```
+
+```{r}
+
+names(tayko)[21] <- "Web.order"
+names(tayko)[22] <- "Gender"
+
+
+# get column names
+colnames(tayko)
+```
+
+
+
+```{r}
+ggplot(tayko,aes(x = Spending))+
+      geom_histogram(aes(y=..density..))+
+      geom_density(color="Green", fill="Green", alpha=0.5)
+```
+
+from the above histogram we can say that lower the spending higher the density, It means peolpe with lower spending are very high compared to people with higher spending 
+```{r}
+summary(tayko)
+```
+
+
+```{r}
+numericVars <- which(sapply(tayko, is.numeric)) #index vector numeric variables
+numericVarNames <- names(numericVars) #saving names vector for use later on
+cat('There are', length(numericVars), 'numeric variables')
+```
+
+
+```{r}
+tayko_numVar <- tayko[, numericVars]
+cor_numVar <- cor(tayko_numVar, use="pairwise.complete.obs") #correlations of all numeric variables
+```
+
+```{r}
+#sort on decreasing correlations with SalePrice
+cor_sorted <- as.matrix(sort(cor_numVar[,'Spending'], decreasing = TRUE))
+ #select only high corelations
+CorHigh <- names(which(apply(cor_sorted, 1, function(x) abs(x)>0.5)))
+cor_numVar <- cor_numVar[CorHigh, CorHigh]
+
+corrplot.mixed(cor_numVar, tl.col="black", tl.pos = "lt")
+```
+the highest correlation is for freq-spending pair when compared to other pairs
+
+```{r}
+ggplot(data=tayko[!is.na(tayko$Spending),], aes(x=factor(Purchase), y=Spending))+
+        geom_boxplot(col='blue') + labs(x='Purchase') +
+        scale_y_continuous(breaks= seq(0, 80, by=1000), labels = comma)
+```
+Based on the the above boxplot we can say that if there is no purchase there is no spending and there is slight increase in spending when purchase is at 1 
+
+```{r}
+ggplot(data=tayko[!is.na(tayko$Spending),], aes(x=Spending, y=Freq))+
+        geom_point(col='blue') + geom_smooth(method = "lm", se=FALSE, color="black", aes(group=1)) +
+        scale_y_continuous(breaks= seq(0, 800, by=10000), labels = comma) +
+        geom_text_repel(aes(label = ifelse(tayko$Freq[!is.na(tayko$Spending)]>4500, rownames(all), '')))
+```
+when spending is below 500 the frequency of people is more compared to people spending more than 500. it seems that there are many people in the category of spending below 500.
+
+# STAGE 2:Data Mining Techniques(Methodology)
+
+## We have been instructed to use three data mining techniques to implement our predictive models. The 3 selected techniques were: Multiple regression analysis, Logistic regression and Regression tree. 
+
+## Logistic Regression  -  we have implemeneted this technique to  help in estimating the probability of an individulas to purchase or not to purchase based on our given Tayko dataset of independent variables. The dependent variable in our case is Purchase variable and is bounded between 0 and 1.
+
+## Regression tree  -  Is a technique that identifies what combination of our dataset factors  best differentiates between individuals(who purchases/not purchases) based on our categorical variable of interest which is (Purchase variable)
+
+## Multiple regression analysis   -  Is a technique that have been used to analyze the relationship between a single dependent variable (which is Purchase variable) and several independent variables(the predictor variables). The objective of multiple regression analysis is to use the independent variables whose values are known to predict the value of the single dependent value.
+
+# STAGE 3: Implemetation of the data mining techniques
+## Multiple regression analysis 
+### Below is the summary of Multiple regression analysis technique showing its coefficients after the training has taken place using training dataset and ready for testing using the testing dataset
+```{r}
+
+# we partition tayko dataset
+set.seed(1234)
+## partitioning into training (60%) and validation (40%)
+train.rows <- sample(rownames(tayko), dim(tayko)[1]*0.6)
+valid.rows <- sample(setdiff(rownames(tayko), train.rows),dim(tayko)[1]*0.2)
+# assign the remaining 20% row IDs serve as test
+test.rows <- setdiff(rownames(tayko), union(train.rows, valid.rows))
+# create the 3 data frames by collecting all columns from the appropriate rows
+train.data <- tayko[train.rows, ]
+valid.data <- tayko[valid.rows, ]
+test.data <- tayko[test.rows, ]
+
+# use lm() to run a linear regression of Price on all 11 predictors in the
+# training set.
+# use . after ~ to include all the remaining columns in train.df as predictors.
+tayko.lm <- lm(Purchase ~ ., data = train.data)
+
+summary(tayko.lm)
+```
+
+### Below are the predicted values of our Purchase variable based on the predictor variables using our Multiple regression analysis technique
+```{r}
+
+# use predict() with type = "response" to compute predicted probabilities.
+tayko.lm.pred <- predict(tayko.lm, valid.data, type = "response")
+# first 5 actual and predicted records
+data.frame(actual = valid.data$Purchase[1:5], predicted = tayko.lm.pred[1:5])
+
+
+table_mat <- table(valid.data$Purchase, tayko.lm.pred)
+
+#get the predicted values of Purchase variable
+table_mat
+
+```
+
+
+### Below displays the accuracy  of our Multiple regression analysis technique in which we can tell whether to be used or not in performing predictions using the dataset given when compared with other techniques performance
+```{r}
+
+accuracy <- sum(diag(table_mat)) / sum(table_mat)
+
+print(paste('Accuracy of Multiple regression analysis  is', accuracy))
+
+```
+
+
+
+
+
+## Regression trees
+### Below is the summary of Regression trees technique showing the prunned regression tree after the training has taken place using training dataset and ready for testing using the testing dataset
+
+```{r}
+
+library(rpart) #for fitting decision trees
+library(rpart.plot) #for plotting decision trees
+# we partition tayko dataset
+set.seed(1234)
+## partitioning into training (60%) and validation (40%)
+train.rows <- sample(rownames(tayko), dim(tayko)[1]*0.6)
+valid.rows <- sample(setdiff(rownames(tayko), train.rows),dim(tayko)[1]*0.2)
+# assign the remaining 20% row IDs serve as test
+test.rows <- setdiff(rownames(tayko), union(train.rows, valid.rows))
+# create the 3 data frames by collecting all columns from the appropriate rows
+train.data <- tayko[train.rows, ]
+valid.data <- tayko[valid.rows, ]
+test.data <- tayko[test.rows, ]
+
+#build the initial tree
+tree <- rpart(Purchase ~ ., data=train.data, control=rpart.control(cp=.0001))
+
+#view results
+printcp(tree)
+
+
+#identify best cp value to use
+best <- tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"]
+
+#produce a pruned tree based on the best cp value
+pruned_tree <- prune(tree, cp=best)
+
+#plot the pruned tree
+prp(pruned_tree,
+    faclen=0, #use full names for factor labels
+    extra=1, #display number of obs. for each terminal node
+    roundint=F, #don't round to integers in output
+    digits=5) #display 5 decimal places in output
+```
+
+### Below are the predicted values of our Purchase variable based on the predictor variables using our Regression Tree technique
+```{r}
+
+# use predict() with type = "response" to compute predicted probabilities.
+pruned_tree.pred <- predict(pruned_tree, valid.data, type = "matrix")
+# first 5 actual and predicted records
+data.frame(actual = valid.data$Purchase, predicted = pruned_tree.pred)
+
+length(pruned_tree.pred)
+table_mat <- table(valid.data$Purchase, pruned_tree.pred)
+
+table_mat
+```
+
+### Below displays the accuracy  of our Regression Tree  technique in which we can tell whether to be used or not in performing predictions using the dataset given when compared with other techniques performance
+
+```{r}
+
+accuracy <- sum(diag(table_mat)) / sum(table_mat)
+
+print(paste('Accuracy of Regression Tree  is', accuracy))
+```
+
+
+
+## Logistic regression
+### Below is the summary of Logistic regression technique showing its coefficients and residuals after the training has taken place using training dataset and ready for testing using the testing dataset
+
+```{r}
+
+# we partition tayko dataset
+set.seed(1234)
+## partitioning into training (60%) and validation (40%)
+train.rows <- sample(rownames(tayko), dim(tayko)[1]*0.6)
+valid.rows <- sample(setdiff(rownames(tayko), train.rows),dim(tayko)[1]*0.2)
+# assign the remaining 20% row IDs serve as test
+test.rows <- setdiff(rownames(tayko), union(train.rows, valid.rows))
+# create the 3 data frames by collecting all columns from the appropriate rows
+train.data <- tayko[train.rows, ]
+valid.data <- tayko[valid.rows, ]
+test.data <- tayko[test.rows, ]
+
+
+# run logistic regression
+# use glm() (general linear model) with family = "binomial" to fit a logistic
+# regression.
+logit.reg <- glm(Purchase ~ ., data = train.data, family = "binomial")
+summary(logit.reg)
+
+```
+
+### Below are the predicted values of our Purchase variable based on the predictor variables using our Logistic Regression technique
+
+```{r}
+
+# use predict() with type = "response" to compute predicted probabilities.
+logit.reg.pred <- predict(logit.reg, valid.data, type = "response")
+# first 5 actual and predicted records
+data.frame(actual = valid.data$Purchase, predicted = logit.reg.pred)
+
+table_mat <- table(valid.data$Purchase, logit.reg.pred)
+
+
+```
+### Below displays the accuracy  of our Logistic Regression  technique in which we can tell whether to be used or not in performing predictions using the dataset given when compared with other techniques performance
+
+```{r}
+
+accuracy <- sum(diag(table_mat)) / sum(table_mat)
+
+print(paste('Accuracy of Logistic Regression is', accuracy))
+
+```
+
+# In nutshell, from the 3 data mining results, based on each technique accuracy, its clear that, Regression tree best fits to the dataset given as its performance on the accuracy is perfect when compared to Logistic regression and Multiple Regression Analysis. 
+# Therefore, i select Regression tree as the best fit technique to be used to classify a "purchase" or "no purchase"
